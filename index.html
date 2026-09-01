@@ -12,6 +12,48 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup,
+    createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import {
+    getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot,
+    enableIndexedDbPersistence
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  // ⚠️ REEMPLAZA estos valores con los de TU proyecto de Firebase:
+  // Firebase Console → ⚙️ Configuración del proyecto → Tus apps → SDK setup and configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyCpX7Cmt14EHNjDP4U8zDty80MKIBZ3Wlg",
+    authDomain: "agenda-2e6c8.firebaseapp.com",
+    projectId: "agenda-2e6c8",
+    storageBucket: "agenda-2e6c8.firebasestorage.app",
+    messagingSenderId: "974030468065",
+    appId: "1:974030468065:web:c4a13a06981de23c9258a0"
+  };
+
+  const isConfigured = !Object.values(firebaseConfig).some(v => String(v).startsWith('TU_'));
+  window.__agendaFirebase = { isConfigured };
+
+  if (isConfigured) {
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    try { await enableIndexedDbPersistence(db); } catch (e) { /* varias pestañas abiertas u otro motivo; se sigue sin persistencia offline de Firestore */ }
+
+    window.__agendaFirebase = {
+      isConfigured, auth, db,
+      GoogleAuthProvider, signInWithPopup,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword,
+      signOut, onAuthStateChanged,
+      collection, doc, setDoc, deleteDoc, onSnapshot,
+    };
+  }
+  window.dispatchEvent(new Event('agenda-firebase-ready'));
+</script>
 <style>
   :root{
     --paper: #EFEEE7;
@@ -68,6 +110,97 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 12px;
+  }
+  .account-row{
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 8px;
+    font-size: 12.5px;
+  }
+  .user-email{ color: var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .signout-btn{
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    flex: none;
+  }
+
+  /* ---------- Auth gate ---------- */
+  .auth-gate{
+    min-height: 100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 24px;
+  }
+  .auth-card{
+    width: min(400px, 100%);
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 28px 26px;
+  }
+  .auth-title{
+    font-family: var(--font-display);
+    font-size: 30px;
+    margin: 0 0 6px;
+  }
+  .auth-subtitle{
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin: 0 0 20px;
+  }
+  .auth-warning{
+    background: var(--alta-bg);
+    border: 1px solid var(--alta);
+    color: var(--alta);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .auth-warning p{ margin: 6px 0 0; }
+  .auth-warning code{ background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 3px; }
+  .google-btn{
+    width:100%;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    background:#fff;
+  }
+  .auth-divider{
+    display:flex; align-items:center; gap: 10px;
+    margin: 18px 0;
+    color: var(--ink-soft);
+    font-size: 12px;
+  }
+  .auth-divider::before, .auth-divider::after{
+    content:""; flex:1; height:1px; background: var(--line);
+  }
+  .auth-tabs{ display:flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .auth-tab-btn{
+    flex:1;
+    background:none; border:none;
+    padding: 10px 6px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor:pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .auth-tab-btn.active{ color: var(--ink); border-bottom-color: var(--accent); }
+  .auth-error{
+    font-size: 13px;
+    color: var(--alta);
+    background: var(--alta-bg);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    margin: -4px 0 14px;
   }
   .brand h1{
     font-family: var(--font-display);
@@ -493,10 +626,57 @@
 </head>
 <body>
 
+<!-- ============ AUTENTICACIÓN ============ -->
+<div id="authGate" class="auth-gate">
+  <div class="auth-card">
+    <h1 class="auth-title">Agenda</h1>
+    <p class="auth-subtitle">Inicia sesión para sincronizar tus tareas entre tus dispositivos.</p>
+
+    <div id="authConfigWarning" class="auth-warning" hidden>
+      <strong>Falta configurar Firebase.</strong>
+      <p>Reemplaza el objeto <code>firebaseConfig</code> en <code>index.html</code> con las credenciales de tu propio proyecto de Firebase (Firebase Console → Configuración del proyecto → tus apps → SDK setup). Mientras tanto, el inicio de sesión no funcionará.</p>
+    </div>
+
+    <div id="authForms">
+      <button type="button" class="btn google-btn" id="btnGoogleSignIn">
+        <svg viewBox="0 0 48 48" width="18" height="18"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.7-.4-4.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.4 29.6 3 24 3 16.3 3 9.6 7.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-2.1 14.1-5.6l-6.5-5.5C29.6 35.7 26.9 36.7 24 36.7c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.5 40.6 16.2 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.8l6.5 5.5C41.5 36 45 30.5 45 24c0-1.4-.1-2.7-.4-3.5z"/></svg>
+        Continuar con Google
+      </button>
+
+      <div class="auth-divider"><span>o</span></div>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab-btn active" data-mode="login">Iniciar sesión</button>
+        <button type="button" class="auth-tab-btn" data-mode="register">Crear cuenta</button>
+      </div>
+
+      <form id="emailAuthForm">
+        <div class="field">
+          <label for="authEmail">Correo</label>
+          <input type="email" id="authEmail" required placeholder="tucorreo@ejemplo.com">
+        </div>
+        <div class="field">
+          <label for="authPassword">Contraseña</label>
+          <input type="password" id="authPassword" required minlength="6" placeholder="Mínimo 6 caracteres">
+        </div>
+        <p class="auth-error" id="authError" hidden></p>
+        <button type="submit" class="btn primary" id="authSubmitBtn" style="width:100%;">Iniciar sesión</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appShell" hidden>
+
 <header class="top">
   <div class="brand">
     <h1>Agenda</h1>
     <span class="date-today" id="dateToday"></span>
+  </div>
+  <div class="account-row">
+    <span id="userEmail" class="user-email"></span>
+    <button type="button" id="btnSignOut" class="signout-btn">Cerrar sesión</button>
   </div>
   <div class="permission-banner" id="permissionBanner" hidden>
     <span>Activa las notificaciones para recibir el resumen de las 7:00&nbsp;a.m.</span>
@@ -561,7 +741,7 @@
   <details open>
     <summary>Sincronizar entre celular y PC</summary>
     <div class="details-body">
-      <p>La app no tiene cuentas ni login: tus tareas se guardan solo en este navegador. Para llevarlas a otro dispositivo, exporta un archivo aquí y luego impórtalo allá (por AirDrop, correo, WhatsApp, etc.). Repite cuando quieras actualizar.</p>
+      <p>Al iniciar sesión con la misma cuenta, tus tareas se sincronizan automáticamente entre todos tus dispositivos (usa Firebase por debajo). Como respaldo adicional, también puedes exportar/importar un archivo manualmente.</p>
       <div class="sync-actions">
         <button class="btn" id="btnExport" type="button">⬇ Exportar mis tareas</button>
         <button class="btn" id="btnImportTrigger" type="button">⬆ Importar tareas</button>
@@ -627,6 +807,8 @@
 </dialog>
 
 <div class="toast" id="toast"></div>
+
+</div><!-- /#appShell -->
 
 <script>
 /* ============================================================
@@ -807,11 +989,9 @@ function taskRow(t, opts={}){
     complete.setAttribute('aria-label','Marcar como completada');
     complete.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12l5 5L20 6"/></svg>';
     complete.addEventListener('click', async () => {
-      t.estado = 'cerrada';
-      t.cerradaEn = new Date().toISOString();
-      await dbPut(t);
+      const updated = { ...t, estado: 'cerrada', cerradaEn: new Date().toISOString() };
+      await saveTaskRemote(updated);
       showToast('Tarea completada');
-      render();
     });
     actions.appendChild(complete);
   } else {
@@ -821,11 +1001,10 @@ function taskRow(t, opts={}){
     reopen.setAttribute('aria-label','Reabrir tarea');
     reopen.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4v6h6M20 20v-6h-6M5 15a8 8 0 0013.9 3M19 9A8 8 0 005.1 6"/></svg>';
     reopen.addEventListener('click', async () => {
-      t.estado = 'pendiente';
-      delete t.cerradaEn;
-      await dbPut(t);
+      const updated = { ...t, estado: 'pendiente' };
+      delete updated.cerradaEn;
+      await saveTaskRemote(updated);
       showToast('Tarea reabierta');
-      render();
     });
     actions.appendChild(reopen);
 
@@ -836,10 +1015,8 @@ function taskRow(t, opts={}){
     del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>';
     del.addEventListener('click', async () => {
       if(confirm('¿Eliminar esta tarea definitivamente? No se puede deshacer.')){
-        await dbDelete(t.id);
-        tasks = tasks.filter(x => x.id !== t.id);
+        await deleteTaskRemote(t.id);
         showToast('Tarea eliminada');
-        render();
       }
     });
     actions.appendChild(del);
@@ -1008,14 +1185,11 @@ $('#taskForm').addEventListener('submit', async (e) => {
     prioridad: $('.priority-picker input:checked').value,
     alerta: $('#taskAlerta').checked,
     estado: existing ? existing.estado : 'pendiente',
-    cerradaEn: existing ? existing.cerradaEn : undefined,
+    cerradaEn: existing ? (existing.cerradaEn || null) : null,
   };
-  await dbPut(task);
-  const idx = tasks.findIndex(t => t.id === id);
-  if(idx >= 0) tasks[idx] = task; else tasks.push(task);
+  await saveTaskRemote(task);
   dialog.close();
   showToast(existing ? 'Tarea actualizada' : 'Tarea creada');
-  render();
 });
 
 /* ---------------- Calendar nav ---------------- */
@@ -1133,16 +1307,13 @@ async function importData(file){
     return;
   }
 
-  let nuevas = 0, actualizadas = 0;
+  let n = 0;
   for(const t of incoming){
     if(!t || !t.id || !t.titulo || !t.fecha) continue;
-    const existing = tasks.find(x => x.id === t.id);
-    await dbPut(t);
-    const idx = tasks.findIndex(x => x.id === t.id);
-    if(idx >= 0){ tasks[idx] = t; actualizadas++; } else { tasks.push(t); nuevas++; }
+    await saveTaskRemote(t);
+    n++;
   }
-  render();
-  showToast(`Importado: ${nuevas} nuevas, ${actualizadas} actualizadas`);
+  showToast(`Importadas ${n} tarea(s)`);
 }
 
 $('#btnExport').addEventListener('click', exportData);
@@ -1153,6 +1324,136 @@ $('#importFile').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+/* ============================================================
+   Autenticación (Firebase) + sincronización en tiempo real
+   ============================================================ */
+let fb = null;               // referencias del SDK de Firebase, una vez cargado
+let unsubscribeTasks = null; // función para cancelar el listener de Firestore al cerrar sesión
+
+function fbReady(){
+  return new Promise((resolve) => {
+    if(window.__agendaFirebase){ resolve(window.__agendaFirebase); return; }
+    window.addEventListener('agenda-firebase-ready', () => resolve(window.__agendaFirebase), { once: true });
+  });
+}
+
+function tasksCollectionRef(uid){
+  return fb.collection(fb.db, 'users', uid, 'tasks');
+}
+
+/** Escribe (crea o actualiza) una tarea en Firestore. La UI se actualiza sola vía onSnapshot. */
+async function saveTaskRemote(task){
+  const user = fb.auth.currentUser;
+  if(!user) return;
+  const clean = { ...task };
+  if(clean.cerradaEn === undefined) clean.cerradaEn = null;
+  await fb.setDoc(fb.doc(tasksCollectionRef(user.uid), task.id), clean);
+}
+
+async function deleteTaskRemote(id){
+  const user = fb.auth.currentUser;
+  if(!user) return;
+  await fb.deleteDoc(fb.doc(tasksCollectionRef(user.uid), id));
+}
+
+/** Se llama cada vez que Firestore reporta un cambio (propio o desde otro dispositivo). */
+async function onTasksSnapshot(snapshot){
+  tasks = snapshot.docs.map(d => d.data());
+  render();
+  // Mirror local en IndexedDB: le da al Service Worker algo que leer
+  // para el resumen de las 7 a.m. aunque Firestore no esté disponible ahí.
+  try{
+    const db = await openDB();
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    store.clear();
+    tasks.forEach(t => store.put(t));
+  } catch(e){ /* espejo local opcional; si falla no afecta la app */ }
+
+  maybeSendMorningNotification();
+}
+
+function showAppShell(user){
+  $('#authGate').hidden = true;
+  $('#appShell').hidden = false;
+  $('#userEmail').textContent = user.email || user.displayName || '';
+  unsubscribeTasks = fb.onSnapshot(tasksCollectionRef(user.uid), onTasksSnapshot, (err) => {
+    console.error('Firestore error', err);
+    showToast('Error de sincronización — revisa tu conexión');
+  });
+}
+
+function showAuthGate(){
+  $('#appShell').hidden = true;
+  $('#authGate').hidden = false;
+  if(unsubscribeTasks){ unsubscribeTasks(); unsubscribeTasks = null; }
+  tasks = [];
+}
+
+function authErrorMessage(err){
+  const map = {
+    'auth/invalid-email': 'El correo no es válido.',
+    'auth/user-not-found': 'No existe una cuenta con ese correo.',
+    'auth/wrong-password': 'Contraseña incorrecta.',
+    'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+    'auth/email-already-in-use': 'Ya existe una cuenta con ese correo. Inicia sesión.',
+    'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+    'auth/popup-closed-by-user': 'Cerraste la ventana antes de terminar.',
+    'auth/unauthorized-domain': 'Este dominio no está autorizado en Firebase (Authentication → Settings → Authorized domains).',
+  };
+  return map[err.code] || 'Ocurrió un error. Intenta de nuevo.';
+}
+
+function setupAuthUI(){
+  if(!fb.isConfigured){
+    $('#authConfigWarning').hidden = false;
+    $('#authForms').hidden = true;
+    return;
+  }
+
+  let mode = 'login';
+  $all('.auth-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      $all('.auth-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      $('#authSubmitBtn').textContent = mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
+      $('#authError').hidden = true;
+    });
+  });
+
+  $('#btnGoogleSignIn').addEventListener('click', async () => {
+    try{
+      await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider());
+    } catch(err){
+      $('#authError').hidden = false;
+      $('#authError').textContent = authErrorMessage(err);
+    }
+  });
+
+  $('#emailAuthForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('#authEmail').value.trim();
+    const password = $('#authPassword').value;
+    $('#authError').hidden = true;
+    try{
+      if(mode === 'login'){
+        await fb.signInWithEmailAndPassword(fb.auth, email, password);
+      } else {
+        await fb.createUserWithEmailAndPassword(fb.auth, email, password);
+      }
+    } catch(err){
+      $('#authError').hidden = false;
+      $('#authError').textContent = authErrorMessage(err);
+    }
+  });
+
+  $('#btnSignOut').addEventListener('click', () => fb.signOut(fb.auth));
+
+  fb.onAuthStateChanged(fb.auth, (user) => {
+    if(user) showAppShell(user); else showAuthGate();
+  });
+}
+
 /* ---------------- Init ---------------- */
 async function init(){
   $('#dateToday').textContent = new Date().toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' });
@@ -1161,12 +1462,10 @@ async function init(){
     try { await navigator.serviceWorker.register('sw.js'); } catch(e) { /* sin service worker disponible */ }
   }
 
-  tasks = await dbAll();
-  render();
-  setupNotificationBanner();
-  if(Notification.permission === 'granted') registerPeriodicSync();
+  fb = await fbReady();
+  setupAuthUI();
 
-  maybeSendMorningNotification();
+  setupNotificationBanner();
   setInterval(maybeSendMorningNotification, 60 * 1000);
 }
 init();
