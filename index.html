@@ -464,6 +464,10 @@
   footer.app-footer summary{ cursor:pointer; font-weight:600; color: var(--ink); }
   footer.app-footer .details-body{ margin-top: 10px; }
   footer.app-footer ul{ padding-left: 18px; }
+  footer.app-footer details{ margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  footer.app-footer details:last-of-type{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .sync-actions{ display:flex; gap:10px; flex-wrap: wrap; margin-top: 12px; }
+  .sync-actions .btn{ flex: none; padding: 10px 16px; font-size: 13.5px; }
 
   .toast{
     position: fixed;
@@ -554,6 +558,17 @@
 </main>
 
 <footer class="app-footer">
+  <details open>
+    <summary>Sincronizar entre celular y PC</summary>
+    <div class="details-body">
+      <p>La app no tiene cuentas ni login: tus tareas se guardan solo en este navegador. Para llevarlas a otro dispositivo, exporta un archivo aquí y luego impórtalo allá (por AirDrop, correo, WhatsApp, etc.). Repite cuando quieras actualizar.</p>
+      <div class="sync-actions">
+        <button class="btn" id="btnExport" type="button">⬇ Exportar mis tareas</button>
+        <button class="btn" id="btnImportTrigger" type="button">⬆ Importar tareas</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
+    </div>
+  </details>
   <details>
     <summary>Sobre las notificaciones automáticas</summary>
     <div class="details-body">
@@ -1082,6 +1097,61 @@ async function registerPeriodicSync(){
     // Periodic Background Sync no disponible en este navegador; se usará el chequeo en primer plano.
   }
 }
+
+/* ---------------- Exportar / Importar (sincronización manual) ---------------- */
+function exportData(){
+  const payload = {
+    app: 'agenda',
+    exportedAt: new Date().toISOString(),
+    tasks,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `agenda-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Archivo exportado');
+}
+
+async function importData(file){
+  let payload;
+  try{
+    const text = await file.text();
+    payload = JSON.parse(text);
+  } catch(err){
+    alert('El archivo no es un respaldo válido de Agenda (JSON inválido).');
+    return;
+  }
+  const incoming = Array.isArray(payload) ? payload : payload.tasks;
+  if(!Array.isArray(incoming)){
+    alert('El archivo no contiene tareas reconocibles.');
+    return;
+  }
+
+  let nuevas = 0, actualizadas = 0;
+  for(const t of incoming){
+    if(!t || !t.id || !t.titulo || !t.fecha) continue;
+    const existing = tasks.find(x => x.id === t.id);
+    await dbPut(t);
+    const idx = tasks.findIndex(x => x.id === t.id);
+    if(idx >= 0){ tasks[idx] = t; actualizadas++; } else { tasks.push(t); nuevas++; }
+  }
+  render();
+  showToast(`Importado: ${nuevas} nuevas, ${actualizadas} actualizadas`);
+}
+
+$('#btnExport').addEventListener('click', exportData);
+$('#btnImportTrigger').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if(file) importData(file);
+  e.target.value = '';
+});
 
 /* ---------------- Init ---------------- */
 async function init(){
