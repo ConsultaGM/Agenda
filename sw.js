@@ -6,7 +6,7 @@
    completamente cerrado o el dispositivo apagado. Ver el aviso
    de limitaciones dentro de la app (pie de página). */
 
-const CACHE_NAME = 'agenda-cache-v2';
+const CACHE_NAME = 'agenda-cache-v3';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
