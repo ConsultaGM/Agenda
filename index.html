@@ -16,6 +16,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import {
     getAuth, GoogleAuthProvider, signInWithPopup,
+    signInWithRedirect, getRedirectResult,
     createUserWithEmailAndPassword, signInWithEmailAndPassword,
     signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
@@ -47,6 +48,7 @@
     window.__agendaFirebase = {
       isConfigured, auth, db,
       GoogleAuthProvider, signInWithPopup,
+      signInWithRedirect, getRedirectResult,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       signOut, onAuthStateChanged,
       collection, doc, setDoc, deleteDoc, onSnapshot,
@@ -78,6 +80,10 @@
 
   *{ box-sizing: border-box; }
   html{ -webkit-text-size-adjust: 100%; }
+  /* Fix crítico: cualquier estilo de autor con "display" (p.ej. .auth-gate{display:flex})
+     le gana a la regla por defecto del navegador [hidden]{display:none}. Sin esta línea,
+     dos pantallas pueden quedar visibles a la vez (login + app apilados). */
+  [hidden]{ display: none !important; }
   body{
     margin:0;
     background: var(--paper);
@@ -622,9 +628,59 @@
   @media (min-width: 640px){
     .task-row{ padding: 16px 8px 16px 18px; }
   }
+
+  /* ---- Transición entre login y app ---- */
+  .switch-screen{
+    position: fixed;
+    inset: 0;
+    background: var(--paper);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: 14px;
+    z-index: 200;
+    opacity: 1;
+    transition: opacity .35s ease;
+  }
+  .switch-screen.fade-out{ opacity: 0; pointer-events: none; }
+  .switch-mark{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 26px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .switch-spinner{
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 3px solid var(--line);
+    border-top-color: var(--accent);
+    animation: switch-spin .7s linear infinite;
+  }
+  @keyframes switch-spin{ to{ transform: rotate(360deg); } }
+  #appShell, #authGate{
+    animation: screen-in .28s ease;
+  }
+  @keyframes screen-in{
+    from{ opacity: 0; transform: translateY(6px); }
+    to{ opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .switch-spinner{ animation: none; border-top-color: var(--line); }
+    #appShell, #authGate{ animation: none; }
+  }
 </style>
 </head>
 <body>
+
+<!-- Pantalla breve de transición: se muestra mientras se resuelve la sesión
+     y al pasar de login → app, para que el cambio se sienta como una
+     pantalla nueva en vez de un scroll dentro de la misma página. -->
+<div class="switch-screen" id="switchScreen">
+  <div class="switch-mark">Agenda</div>
+  <div class="switch-spinner"></div>
+</div>
 
 <!-- ============ AUTENTICACIÓN ============ -->
 <div id="authGate" class="auth-gate">
@@ -1373,21 +1429,38 @@ async function onTasksSnapshot(snapshot){
   maybeSendMorningNotification();
 }
 
+/* Muestra brevemente la pantalla "Agenda" con spinner mientras se cambia
+   de sección (login → app o app → login), y luego revela la pantalla
+   destino con una pequeña animación. Así el cambio se siente como una
+   pantalla nueva y no como un scroll dentro de la misma página. */
+function switchTo(showFn){
+  const switchScreen = $('#switchScreen');
+  switchScreen.classList.remove('fade-out');
+  setTimeout(() => {
+    showFn();
+    setTimeout(() => switchScreen.classList.add('fade-out'), 180);
+  }, 120);
+}
+
 function showAppShell(user){
-  $('#authGate').hidden = true;
-  $('#appShell').hidden = false;
-  $('#userEmail').textContent = user.email || user.displayName || '';
-  unsubscribeTasks = fb.onSnapshot(tasksCollectionRef(user.uid), onTasksSnapshot, (err) => {
-    console.error('Firestore error', err);
-    showToast('Error de sincronización — revisa tu conexión');
+  switchTo(() => {
+    $('#authGate').hidden = true;
+    $('#appShell').hidden = false;
+    $('#userEmail').textContent = user.email || user.displayName || '';
+    unsubscribeTasks = fb.onSnapshot(tasksCollectionRef(user.uid), onTasksSnapshot, (err) => {
+      console.error('Firestore error', err);
+      showToast('Error de sincronización — revisa tu conexión');
+    });
   });
 }
 
 function showAuthGate(){
-  $('#appShell').hidden = true;
-  $('#authGate').hidden = false;
-  if(unsubscribeTasks){ unsubscribeTasks(); unsubscribeTasks = null; }
-  tasks = [];
+  switchTo(() => {
+    $('#appShell').hidden = true;
+    $('#authGate').hidden = false;
+    if(unsubscribeTasks){ unsubscribeTasks(); unsubscribeTasks = null; }
+    tasks = [];
+  });
 }
 
 function authErrorMessage(err){
@@ -1421,9 +1494,20 @@ function setupAuthUI(){
     });
   });
 
+  // Safari en iOS (y cualquier PWA instalada en pantalla de inicio) bloquea o
+  // rompe el flujo de popup de Google. Ahí usamos redirect; en escritorio
+  // dejamos el popup, que da mejor experiencia.
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const useRedirect = isStandalone || isIOS;
+
   $('#btnGoogleSignIn').addEventListener('click', async () => {
     try{
-      await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider());
+      if(useRedirect){
+        await fb.signInWithRedirect(fb.auth, new fb.GoogleAuthProvider());
+      } else {
+        await fb.signInWithPopup(fb.auth, new fb.GoogleAuthProvider());
+      }
     } catch(err){
       $('#authError').hidden = false;
       $('#authError').textContent = authErrorMessage(err);
@@ -1464,6 +1548,19 @@ async function init(){
 
   fb = await fbReady();
   setupAuthUI();
+
+  // Si veníamos de un signInWithRedirect (Google en iOS/PWA), procesamos
+  // el resultado aquí. onAuthStateChanged también se disparará solo,
+  // pero esto nos deja capturar errores del redirect (p.ej. dominio no
+  // autorizado) y mostrarlos en pantalla.
+  if(fb.isConfigured){
+    try{
+      await fb.getRedirectResult(fb.auth);
+    } catch(err){
+      $('#authError').hidden = false;
+      $('#authError').textContent = authErrorMessage(err);
+    }
+  }
 
   setupNotificationBanner();
   setInterval(maybeSendMorningNotification, 60 * 1000);
