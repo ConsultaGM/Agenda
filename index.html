@@ -32,6 +32,15 @@
         OneSignalDeferred.push(async function(OneSignal){
           await OneSignal.init({
             appId: ONESIGNAL_APP_ID,
+            // Tu sitio vive en /Agenda/ (subcarpeta de GitHub Pages), y ya
+            // fusionamos el worker de OneSignal dentro de tu propio sw.js
+            // (ver import Scripts al inicio de ese archivo). Sin estas dos
+            // líneas, OneSignal busca por defecto "OneSignalSDKWorker.js"
+            // en la raíz del dominio, que no existe ahí — y la suscripción
+            // falla en silencio aunque el permiso del navegador sí se
+            // conceda.
+            serviceWorkerParam: { scope: '/Agenda/' },
+            serviceWorkerPath: 'sw.js',
             // Usamos nuestro propio banner (#permissionBanner) en vez del
             // prompt automático de OneSignal, para mantener el estilo de la app.
             promptOptions: { slidedown: { enabled: false } },
