@@ -1,0 +1,28 @@
+name: Aviso diario Agenda
+
+on:
+  schedule:
+    # 12:30 UTC = 7:30 a.m. hora de Bogotá (UTC-5) todos los días.
+    # Si cambias la hora del aviso, ajusta este valor
+    # (resta 5 horas a la hora de Bogotá para obtener la hora UTC).
+    - cron: '30 12 * * *'
+  workflow_dispatch: {} # permite ejecutarlo manualmente desde la pestaña "Actions" para probar
+
+jobs:
+  send-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar notificación push vía OneSignal
+        env:
+          ONESIGNAL_REST_API_KEY: ${{ secrets.ONESIGNAL_REST_API_KEY }}
+        run: |
+          curl -s -w "\nHTTP status: %{http_code}\n" -X POST "https://onesignal.com/api/v1/notifications" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -H "Authorization: Basic $ONESIGNAL_REST_API_KEY" \
+            -d '{
+              "app_id": "0544d4f6-2e28-4671-adb2-579e3cb30334",
+              "included_segments": ["Subscribed Users"],
+              "headings": {"en": "Agenda", "es": "Agenda"},
+              "contents": {"en": "Tienes tareas pendientes hoy — abre Agenda", "es": "Tienes tareas pendientes hoy — abre Agenda"},
+              "url": "https://consultagm.github.io/Agenda/"
+            }'
