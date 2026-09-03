@@ -12,6 +12,30 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ============ OneSignal (notificaciones push) ============ -->
+<!-- ⚠️ REEMPLAZA "TU_ONESIGNAL_APP_ID" con el App ID que te da OneSignal
+     en Settings → Keys & IDs. Si el asistente "Typical Site" de OneSignal
+     te dio un <script src="..."> con una URL distinta a la de abajo,
+     usa la de ellos — la suya siempre es la versión vigente. -->
+<script defer src="https://cdn.onesignal.com/sdks/OneSignalSDK.page.js"></script>
+<script>
+  const ONESIGNAL_APP_ID = "0544d4f6-2e28-4671-adb2-579e3cb30334";
+  window.__agendaOneSignalReady = !ONESIGNAL_APP_ID.startsWith('TU_');
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  if(window.__agendaOneSignalReady){
+    OneSignalDeferred.push(async function(OneSignal){
+      await OneSignal.init({
+        appId: ONESIGNAL_APP_ID,
+        // Usamos nuestro propio banner (#permissionBanner) en vez del
+        // prompt automático de OneSignal, para mantener el estilo de la app.
+        promptOptions: { slidedown: { enabled: false } },
+      });
+      window.__OneSignal = OneSignal;
+    });
+  }
+</script>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import {
@@ -808,13 +832,11 @@
   <details>
     <summary>Sobre las notificaciones automáticas</summary>
     <div class="details-body">
-      <p>Esta app funciona sin servidor: todo se guarda solo en este dispositivo (IndexedDB) y las alertas se generan localmente, con la Web Notifications API.</p>
-      <p><strong>Límites que debes conocer:</strong></p>
+      <p>El aviso diario de las 7:00&nbsp;a.m. se envía con <strong>OneSignal (push real)</strong>: llega aunque la app esté completamente cerrada o el celular estuviera apagado y se encienda después, tanto en Android como en iPhone (iOS 16.4+ con la app instalada en pantalla de inicio).</p>
       <ul>
-        <li>Si el navegador está completamente cerrado, o el celular/PC está apagado, la notificación de las 7:00&nbsp;a.m. no puede dispararse — no hay ningún proceso corriendo que la genere.</li>
-        <li>Instalada como app (PWA) y con el navegador abierto en segundo plano, el Service Worker intenta enviarla igualmente usando "Periodic Background Sync" si tu navegador lo soporta (por ahora, principalmente Chrome/Edge en Android y escritorio).</li>
-        <li>Como respaldo, siempre verás el resumen "Pendientes de hoy" arriba, apenas abras la app, sin depender de la notificación del sistema.</li>
-        <li>Si necesitas notificaciones 100% confiables, incluso con el dispositivo apagado o la app cerrada por completo, la única forma real es tener un backend con notificaciones push (ej. Firebase Cloud Messaging, OneSignal, o un servidor propio con Web Push), que envíe la alerta desde afuera del dispositivo.</li>
+        <li>Actívalo con el botón "Activar" del banner de arriba — se pide una sola vez.</li>
+        <li>El contenido del aviso es fijo (no muestra el número exacto de tareas); el detalle real siempre lo ves en "Pendientes de hoy" apenas abres la app.</li>
+        <li>Si aún no se ha configurado el App ID de OneSignal en esta copia de la app, este aviso cae de respaldo al método local anterior: solo funciona con la app o pestaña abierta.</li>
       </ul>
     </div>
   </details>
@@ -1306,10 +1328,19 @@ function setupNotificationBanner(){
   }
 }
 $('#btnEnableNotif').addEventListener('click', async () => {
-  const perm = await Notification.requestPermission();
   $('#permissionBanner').hidden = true;
-  if(perm === 'granted') showToast('Notificaciones activadas');
-  registerPeriodicSync();
+  if(window.__agendaOneSignalReady && window.__OneSignal){
+    // Camino recomendado: push real vía OneSignal, funciona aunque
+    // la app esté completamente cerrada (incluye iPhone con iOS 16.4+).
+    await window.__OneSignal.Notifications.requestPermission();
+    if(window.__OneSignal.Notifications.permission) showToast('Notificaciones activadas');
+  } else {
+    // Respaldo si aún no configuraste OneSignal: notificación local,
+    // solo funciona con la app/pestaña abierta.
+    const perm = await Notification.requestPermission();
+    if(perm === 'granted') showToast('Notificaciones activadas');
+    registerPeriodicSync();
+  }
 });
 $('#btnDismissNotif').addEventListener('click', () => { $('#permissionBanner').hidden = true; });
 

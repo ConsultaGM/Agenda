@@ -4,7 +4,12 @@
      Periodic Background Sync (si el navegador lo soporta).
    IMPORTANTE: esto NO garantiza el envío si el navegador está
    completamente cerrado o el dispositivo apagado. Ver el aviso
-   de limitaciones dentro de la app (pie de página). */
+   de limitaciones dentro de la app (pie de página).
+   - Además importa el Service Worker de OneSignal para que los push
+     reales (que sí llegan con la app cerrada) se muestren desde aquí
+     mismo, sin registrar un segundo Service Worker aparte. */
+
+importScripts('https://cdn.onesignal.com/sdks/OneSignalSDKWorker.js');
 
 const CACHE_NAME = 'agenda-cache-v4';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
