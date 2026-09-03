@@ -1328,47 +1328,47 @@ async function maybeSendMorningNotification(){
   }
 }
 
-function setupNotificationBanner(){
+async function setupNotificationBanner(){
   if(!('Notification' in window)) return;
-  if(Notification.permission === 'default'){
-    $('#permissionBanner').hidden = false;
-  }
-}
-$('#btnEnableNotif').addEventListener('click', async () => {
-  $('#permissionBanner').hidden = true;
-  showToast('Activando notificaciones…');
-
-  let oneSignal = null;
+  if(Notification.permission !== 'default') return;
+  // Esperamos a que OneSignal termine de inicializarse ANTES de mostrar
+  // el botón "Activar" (en segundo plano, sin que el usuario lo note —
+  // normalmente toma una fracción de segundo). Es clave hacerlo aquí y
+  // no dentro del clic: en iOS/Safari, si el permiso se pide después de
+  // un "await", el navegador considera que el gesto del usuario ya
+  // expiró y bloquea el diálogo sin avisar ni dar error.
   if(window.__agendaOneSignalReady){
-    // Espera a que OneSignal.init() termine de verdad (hasta 6s), en vez
-    // de revisar la variable en el instante del clic — así no cae al
-    // respaldo local solo porque el SDK aún estaba cargando.
-    oneSignal = await Promise.race([
+    await Promise.race([
       window.__OneSignalPromise,
-      new Promise((resolve) => setTimeout(() => resolve(null), 6000)),
+      new Promise((resolve) => setTimeout(resolve, 4000)),
     ]);
   }
+  $('#permissionBanner').hidden = false;
+}
+$('#btnEnableNotif').addEventListener('click', () => {
+  $('#permissionBanner').hidden = true;
+  const oneSignal = window.__OneSignal || null;
 
   if(oneSignal){
-    // Camino recomendado: push real vía OneSignal, funciona aunque
-    // la app esté completamente cerrada (incluye iPhone con iOS 16.4+,
-    // instalada desde la pantalla de inicio).
-    try{
-      await oneSignal.Notifications.requestPermission();
-      if(oneSignal.Notifications.permission) showToast('Notificaciones activadas');
-      else showToast('No se concedió el permiso');
-    } catch(err){
-      console.error('OneSignal requestPermission error', err);
-      showToast('No se pudo activar OneSignal — usando respaldo local');
-      const perm = await Notification.requestPermission();
-      if(perm === 'granted') registerPeriodicSync();
-    }
+    // Camino recomendado: push real vía OneSignal, funciona aunque la
+    // app esté completamente cerrada (incluye iPhone con iOS 16.4+,
+    // instalada desde la pantalla de inicio). Se llama de una vez, sin
+    // ningún "await" antes, para no perder el permiso del gesto táctil.
+    oneSignal.Notifications.requestPermission()
+      .then(() => {
+        showToast(oneSignal.Notifications.permission ? 'Notificaciones activadas' : 'No se concedió el permiso');
+      })
+      .catch((err) => {
+        console.error('OneSignal requestPermission error', err);
+        showToast('No se pudo activar OneSignal');
+      });
   } else {
-    // Respaldo si OneSignal no cargó a tiempo o no está configurado:
-    // notificación local, solo funciona con la app/pestaña abierta.
-    const perm = await Notification.requestPermission();
-    if(perm === 'granted') showToast('Notificaciones activadas (modo local)');
-    registerPeriodicSync();
+    // Respaldo si OneSignal no está disponible: notificación local,
+    // solo funciona con la app/pestaña abierta.
+    Notification.requestPermission().then((perm) => {
+      if(perm === 'granted'){ showToast('Notificaciones activadas (modo local)'); registerPeriodicSync(); }
+      else showToast('No se concedió el permiso');
+    });
   }
 });
 $('#btnDismissNotif').addEventListener('click', () => { $('#permissionBanner').hidden = true; });
