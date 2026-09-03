@@ -9,7 +9,7 @@
      reales (que sí llegan con la app cerrada) se muestren desde aquí
      mismo, sin registrar un segundo Service Worker aparte. */
 
-importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDKWorker.js');
+importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
 const CACHE_NAME = 'agenda-cache-v4';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
