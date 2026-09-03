@@ -21,7 +21,7 @@ jobs:
             -H "Authorization: Basic $ONESIGNAL_REST_API_KEY" \
             -d '{
               "app_id": "0544d4f6-2e28-4671-adb2-579e3cb30334",
-              "included_segments": ["Subscribed Users"],
+              "included_segments": ["Total Subscriptions"],
               "headings": {"en": "Agenda", "es": "Agenda"},
               "contents": {"en": "Tienes tareas pendientes hoy — abre Agenda", "es": "Tienes tareas pendientes hoy — abre Agenda"},
               "url": "https://consultagm.github.io/Agenda/"
