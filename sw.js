@@ -11,12 +11,20 @@
 
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE_NAME = 'agenda-cache-v4';
+const CACHE_NAME = 'agenda-cache-v5';
 const APP_SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) =>
+      // cache:'reload' evita que el navegador reutilice una respuesta HTTP
+      // vieja al precachear — sin esto, una actualización podía quedar
+      // "medio aplicada" (el Service Worker cambia, pero el contenido
+      // guardado seguía siendo el de antes).
+      Promise.all(APP_SHELL.map((url) =>
+        fetch(url, { cache: 'reload' }).then((res) => cache.put(url, res)).catch(() => {})
+      ))
+    ).then(() => self.skipWaiting())
   );
 });
 

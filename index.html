@@ -1286,8 +1286,13 @@ function renderCategoryManagerList(){
     del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>';
     del.addEventListener('click', async () => {
       if(confirm('¿Eliminar la categoría "' + c.nombre + '"? Las tareas que la usan quedarán sin categoría.')){
-        await deleteCategoryRemote(c.id);
-        showToast('Categoría eliminada');
+        try{
+          await deleteCategoryRemote(c.id);
+          showToast('Categoría eliminada');
+        } catch(err){
+          console.error('No se pudo eliminar la categoría', err);
+          showToast('No se pudo eliminar — revisa tu conexión o permisos');
+        }
       }
     });
     li.appendChild(del);
@@ -1563,8 +1568,15 @@ $('#btnCancelDialog').addEventListener('click', () => dialog.close());
 const categoryDialog = $('#categoryDialog');
 function openCategoryDialog(){
   renderCategoryManagerList();
+  // Forzamos el color por defecto cada vez que se abre: algunos
+  // navegadores "recuerdan" el último valor de un <input type="color">
+  // entre recargas y lo muestran en vez del color por defecto real.
+  if(!$('#newCatColor').value || $('#newCatColor').dataset.touched !== 'true'){
+    $('#newCatColor').value = CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length];
+  }
   categoryDialog.showModal();
 }
+$('#newCatColor').addEventListener('input', () => { $('#newCatColor').dataset.touched = 'true'; });
 $('#btnManageCategoriesTop').addEventListener('click', openCategoryDialog);
 $('#btnManageCategoriesInline').addEventListener('click', openCategoryDialog);
 $('#btnCloseCategoryDialog').addEventListener('click', () => categoryDialog.close());
@@ -1575,15 +1587,23 @@ $('#newCatForm').addEventListener('submit', async (e) => {
   if(!nombre) return;
   const color = $('#newCatColor').value;
   const cat = { id: uid(), nombre, color };
-  await saveCategoryRemote(cat);
-  $('#newCatName').value = '';
-  // Siguiente color de la paleta, para que no siempre toque elegir manualmente.
-  const idx = (categories.length) % CATEGORY_COLORS.length;
-  $('#newCatColor').value = CATEGORY_COLORS[idx];
-  showToast('Categoría creada');
-  // Selecciona automáticamente la categoría recién creada en el formulario
-  // de tarea, si está abierto detrás de este diálogo.
-  renderCategoryOptions(cat.id);
+  try{
+    await saveCategoryRemote(cat);
+    $('#newCatName').value = '';
+    $('#newCatColor').dataset.touched = 'false';
+    // Siguiente color de la paleta, para que no siempre toque elegir manualmente.
+    const idx = (categories.length) % CATEGORY_COLORS.length;
+    $('#newCatColor').value = CATEGORY_COLORS[idx];
+    showToast('Categoría creada');
+    // Selecciona automáticamente la categoría recién creada en el formulario
+    // de tarea, si está abierto detrás de este diálogo.
+    renderCategoryOptions(cat.id);
+  } catch(err){
+    console.error('No se pudo guardar la categoría', err);
+    showToast(err.code === 'permission-denied'
+      ? 'Faltan permisos en Firestore para categorías (ver reglas de seguridad)'
+      : 'No se pudo crear la categoría — revisa tu conexión');
+  }
 });
 
 $('#taskForm').addEventListener('submit', async (e) => {
@@ -2026,17 +2046,29 @@ async function init(){
   $('#dateToday').textContent = capFirst(new Date().toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' }));
 
   if('serviceWorker' in navigator){
+    // Si ya había un Service Worker controlando esta página ANTES de
+    // registrar, es una actualización real. Si no había ninguno (primera
+    // instalación), no hace falta recargar — la página ya se acaba de
+    // cargar con el código más reciente igualmente. Sin este chequeo, la
+    // instalación inicial podía disparar una recarga automática y, en
+    // algunos casos, encadenar varias.
+    const hadControllerBefore = !!navigator.serviceWorker.controller;
     try { await navigator.serviceWorker.register('sw.js'); } catch(e) { /* sin service worker disponible */ }
-    // Cuando subimos una versión nueva de la app, el Service Worker viejo
-    // seguía sirviendo archivos cacheados hasta que el usuario forzaba
-    // la recarga manualmente varias veces. Con esto, en cuanto el nuevo
-    // Service Worker toma control, recargamos automáticamente UNA vez.
-    let __swRefreshed = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if(__swRefreshed) return;
-      __swRefreshed = true;
-      window.location.reload();
-    });
+
+    if(hadControllerBefore){
+      let __swRefreshed = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if(__swRefreshed) return;
+        // Segunda salvaguarda: si ya recargamos hace muy poco en esta
+        // pestaña, no lo volvemos a hacer — evita cualquier bucle,
+        // sea cual sea la causa.
+        const last = Number(sessionStorage.getItem('agenda-sw-reload-ts') || 0);
+        if(Date.now() - last < 10000) return;
+        __swRefreshed = true;
+        sessionStorage.setItem('agenda-sw-reload-ts', String(Date.now()));
+        window.location.reload();
+      });
+    }
   }
 
   fb = await fbReady().catch(() => null);
