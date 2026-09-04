@@ -46,7 +46,7 @@ self.addEventListener('fetch', (event) => {
 
 /* ---------- IndexedDB access from within the service worker ---------- */
 const DB_NAME = 'agenda-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'tasks';
 
 function openDB() {

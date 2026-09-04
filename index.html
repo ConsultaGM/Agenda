@@ -84,6 +84,7 @@
       signInWithRedirect, getRedirectResult,
       createUserWithEmailAndPassword, signInWithEmailAndPassword,
       signOut, onAuthStateChanged,
+      setPersistence, browserLocalPersistence,
     } = authMod;
     const {
       getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot,
@@ -107,6 +108,11 @@
     if (isConfigured) {
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
+      // Sesión persistente: evita tener que iniciar sesión cada vez que se
+      // abre la app. Esto ya es el comportamiento por defecto de Firebase
+      // en la mayoría de navegadores, pero lo dejamos explícito para que
+      // no dependa de comportamientos por defecto que puedan cambiar.
+      try { await setPersistence(auth, browserLocalPersistence); } catch (e) { /* algunos navegadores en modo privado no lo permiten; sigue funcionando, solo sin persistencia */ }
       const db = getFirestore(app);
       try { await enableIndexedDbPersistence(db); } catch (e) { /* varias pestañas abiertas u otro motivo; se sigue sin persistencia offline de Firestore */ }
 
@@ -290,7 +296,6 @@
   .brand .date-today{
     font-size: 13px;
     color: var(--ink-soft);
-    text-transform: capitalize;
   }
 
   .permission-banner{
@@ -412,8 +417,15 @@
   }
 
   /* ---------- New task ---------- */
+  .new-task-row{
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: stretch;
+  }
   .new-task-toggle{
-    width: 100%;
+    flex: 1;
+    width: auto;
     background: var(--accent);
     color: var(--accent-ink);
     border: none;
@@ -423,9 +435,103 @@
     font-weight: 600;
     font-family: var(--font-display);
     cursor: pointer;
-    margin-bottom: 20px;
+    margin-bottom: 0;
   }
   .new-task-toggle:active{ transform: translateY(1px); }
+  .manage-cat-btn{
+    flex: none;
+    background: var(--paper-raised);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 16px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .manage-cat-btn:active{ transform: translateY(1px); }
+
+  /* ---------- Categorías: chip/etiqueta en las tareas ---------- */
+  .cat-chip{
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+  .cat-chip .cat-dot{ width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  /* ---------- Campo con botón de dictado por voz ---------- */
+  .field-with-mic{ display: flex; gap: 8px; align-items: flex-start; }
+  .field-with-mic input, .field-with-mic textarea{ flex: 1; }
+  .mic-btn{
+    flex: none;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    color: var(--ink);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+  }
+  .mic-btn svg{ width: 18px; height: 18px; }
+  .mic-btn.recording{
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  @keyframes mic-pulse{ 0%,100%{ opacity: 1; } 50%{ opacity: .55; } }
+
+  /* ---------- Selector de categoría en el formulario ---------- */
+  .cat-select-row{ display: flex; gap: 8px; }
+  .cat-select-row select{ flex: 1; }
+  .link-btn{
+    background: none; border: none; color: var(--accent);
+    font-size: 13px; font-weight: 600; cursor: pointer; padding: 0;
+    text-align: left; margin-top: 6px;
+  }
+
+  /* ---------- Diálogo de categorías ---------- */
+  dialog#categoryDialog{
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 0;
+    width: min(420px, 92vw);
+    max-height: 85vh;
+    overflow: auto;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  dialog#categoryDialog::backdrop{ background: rgba(34,39,31,0.45); }
+  .cat-list{ list-style: none; margin: 14px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .cat-list li{
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+  }
+  .cat-list .cat-dot{ width: 12px; height: 12px; border-radius: 50%; flex: none; }
+  .cat-list .cat-name{ flex: 1; font-size: 14px; font-weight: 600; }
+  .cat-list button{
+    background: none; border: none; cursor: pointer; color: var(--ink-soft);
+    display: flex; align-items: center;
+  }
+  .cat-list button svg{ width: 16px; height: 16px; }
+  .cat-empty{ font-size: 13px; color: var(--ink-soft); text-align: center; padding: 10px 0; }
+  .new-cat-form{ display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .new-cat-form input[type="text"]{ flex: 1; }
+  .new-cat-form input[type="color"]{
+    width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 2px; background: var(--paper-raised); cursor: pointer;
+  }
 
   dialog#taskDialog{
     border: none;
@@ -610,9 +716,24 @@
     font-family: var(--font-display);
     font-size: 19px;
     margin:0;
-    text-transform: capitalize;
   }
   .cal-nav{ display:flex; gap: 6px; }
+  .cal-filter-row{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .cal-filter-row label{
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .cal-filter-row select{
+    flex: 1;
+    max-width: 240px;
+  }
   .cal-nav button{
     width: 38px; height: 38px;
     border-radius: var(--radius-sm);
@@ -661,7 +782,6 @@
     font-family: var(--font-display);
     font-size: 16px;
     margin: 0 0 10px;
-    text-transform: capitalize;
   }
 
   footer.app-footer{
@@ -834,7 +954,10 @@
       <ul id="todayList"></ul>
     </div>
 
-    <button class="new-task-toggle" id="btnNewTask" type="button">+ Nueva tarea</button>
+    <div class="new-task-row">
+      <button class="new-task-toggle" id="btnNewTask" type="button">+ Nueva tarea</button>
+      <button class="manage-cat-btn" id="btnManageCategoriesTop" type="button" aria-label="Gestionar categorías">🏷️ Categorías</button>
+    </div>
 
     <ul class="task-list" id="pendientesList"></ul>
     <div class="empty-state" id="pendientesEmpty" hidden>
@@ -860,6 +983,12 @@
         <button id="calPrev" type="button" aria-label="Mes anterior">‹</button>
         <button id="calNext" type="button" aria-label="Mes siguiente">›</button>
       </div>
+    </div>
+    <div class="cal-filter-row">
+      <label for="calCategoryFilter">Filtrar por categoría</label>
+      <select id="calCategoryFilter">
+        <option value="">Todas las categorías</option>
+      </select>
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="cal-day-detail" id="calDayDetail" hidden>
@@ -901,11 +1030,30 @@
       <input type="hidden" id="taskId">
       <div class="field">
         <label for="taskTitulo">Título</label>
-        <input type="text" id="taskTitulo" required maxlength="120" placeholder="Ej. Enviar informe mensual">
+        <div class="field-with-mic">
+          <input type="text" id="taskTitulo" required maxlength="120" placeholder="Ej. Enviar informe mensual">
+          <button type="button" class="mic-btn" id="micTitulo" aria-label="Dictar título por voz">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z"/></svg>
+          </button>
+        </div>
       </div>
       <div class="field">
         <label for="taskDescripcion">Descripción (opcional)</label>
-        <textarea id="taskDescripcion" maxlength="500" placeholder="Detalles adicionales…"></textarea>
+        <div class="field-with-mic">
+          <textarea id="taskDescripcion" maxlength="500" placeholder="Detalles adicionales…"></textarea>
+          <button type="button" class="mic-btn" id="micDescripcion" aria-label="Dictar descripción por voz">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 003-3V6a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-2.08A7 7 0 0019 12h-2z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="taskCategoria">Categoría (opcional)</label>
+        <div class="cat-select-row">
+          <select id="taskCategoria">
+            <option value="">Sin categoría</option>
+          </select>
+        </div>
+        <button type="button" class="link-btn" id="btnManageCategoriesInline">+ Crear o editar categorías</button>
       </div>
       <div class="field">
         <label for="taskFecha">Fecha de compromiso</label>
@@ -936,6 +1084,22 @@
   </div>
 </dialog>
 
+<dialog id="categoryDialog">
+  <div class="dialog-inner">
+    <h2>Categorías</h2>
+    <p class="cat-empty" id="catEmpty" hidden>Aún no tienes categorías. Crea la primera abajo.</p>
+    <ul class="cat-list" id="catList"></ul>
+    <form id="newCatForm" class="new-cat-form">
+      <input type="color" id="newCatColor" value="#808284" aria-label="Color de la categoría">
+      <input type="text" id="newCatName" maxlength="40" placeholder="Nombre de la categoría" required>
+      <button type="submit" class="btn primary">Agregar</button>
+    </form>
+    <div class="dialog-actions" style="margin-top:18px;">
+      <button type="button" class="btn" id="btnCloseCategoryDialog">Cerrar</button>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast"></div>
 
 </div><!-- /#appShell -->
@@ -949,8 +1113,9 @@
    ============================================================ */
 
 const DB_NAME = 'agenda-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'tasks';
+const STORE_CAT = 'categories';
 
 function openDB(){
   return new Promise((resolve, reject) => {
@@ -961,6 +1126,9 @@ function openDB(){
         const store = db.createObjectStore(STORE, { keyPath: 'id' });
         store.createIndex('fecha', 'fecha');
         store.createIndex('estado', 'estado');
+      }
+      if(!db.objectStoreNames.contains(STORE_CAT)){
+        db.createObjectStore(STORE_CAT, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -998,15 +1166,30 @@ async function dbDelete(id){
   });
 }
 
+async function dbAllCategories(){
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CAT, 'readonly');
+    const req = tx.objectStore(STORE_CAT).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 function uid(){
   return 't-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
 /* ---------------- State ---------------- */
 let tasks = [];
+let categories = [];
 let currentView = 'pendientes';
 let calCursor = new Date();
 let selectedCalDay = null;
+let calCategoryFilter = ''; // '' = todas las categorías
+
+// Paleta de colores para las categorías (definida por el usuario).
+const CATEGORY_COLORS = ['#808284', '#CFDC27', '#AAB720'];
 
 const $ = (sel) => document.querySelector(sel);
 const $all = (sel) => Array.from(document.querySelectorAll(sel));
@@ -1021,6 +1204,9 @@ function isSameDay(a, b){
   return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
 function startOfDay(d){ const n = new Date(d); n.setHours(0,0,0,0); return n; }
+// Capitaliza solo la primera letra (a diferencia de CSS text-transform:capitalize,
+// que ponía en mayúscula CADA palabra — incluida "de", dando "3 De Septiembre").
+function capFirst(str){ return str.charAt(0).toUpperCase() + str.slice(1); }
 
 /* ---------------- Rendering ---------------- */
 function render(){
@@ -1061,6 +1247,54 @@ function renderTodaySummary(){
   });
 }
 
+function getCategory(id){
+  return categories.find(c => c.id === id) || null;
+}
+
+/** Rellena el <select> de categorías dentro del formulario de tarea. */
+function renderCategoryOptions(selectedId){
+  const sel = $('#taskCategoria');
+  const current = selectedId !== undefined ? selectedId : sel.value;
+  sel.innerHTML = '<option value="">Sin categoría</option>';
+  categories.slice().sort((a,b) => a.nombre.localeCompare(b.nombre, 'es')).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    sel.appendChild(opt);
+  });
+  sel.value = current || '';
+}
+
+/** Rellena la lista dentro del diálogo de gestión de categorías. */
+function renderCategoryManagerList(){
+  const ul = $('#catList');
+  ul.innerHTML = '';
+  $('#catEmpty').hidden = categories.length > 0;
+  categories.slice().sort((a,b) => a.nombre.localeCompare(b.nombre, 'es')).forEach(c => {
+    const li = document.createElement('li');
+    const dot = document.createElement('span');
+    dot.className = 'cat-dot';
+    dot.style.background = c.color;
+    li.appendChild(dot);
+    const name = document.createElement('span');
+    name.className = 'cat-name';
+    name.textContent = c.nombre;
+    li.appendChild(name);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.setAttribute('aria-label', 'Eliminar categoría ' + c.nombre);
+    del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg>';
+    del.addEventListener('click', async () => {
+      if(confirm('¿Eliminar la categoría "' + c.nombre + '"? Las tareas que la usan quedarán sin categoría.')){
+        await deleteCategoryRemote(c.id);
+        showToast('Categoría eliminada');
+      }
+    });
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
+}
+
 function taskRow(t, opts={}){
   const li = document.createElement('li');
   li.className = 'task-row';
@@ -1095,6 +1329,17 @@ function taskRow(t, opts={}){
   badge.className = 'badge ' + t.prioridad;
   badge.textContent = priorityLabel[t.prioridad];
   meta.appendChild(badge);
+  const cat = getCategory(t.categoriaId);
+  if(cat){
+    const chip = document.createElement('span');
+    chip.className = 'cat-chip';
+    const dot = document.createElement('span');
+    dot.className = 'cat-dot';
+    dot.style.background = cat.color;
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(cat.nombre));
+    meta.appendChild(chip);
+  }
   const dateSpan = document.createElement('span');
   const overdue = t.estado === 'pendiente' && new Date(t.fecha) < new Date();
   dateSpan.textContent = fmtDateTime(t.fecha);
@@ -1176,7 +1421,7 @@ function renderCerradas(){
 const DOW = ['lun','mar','mié','jue','vie','sáb','dom'];
 
 function renderCalendar(){
-  const label = calCursor.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const label = capFirst(calCursor.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }));
   $('#calMonthLabel').textContent = label;
 
   const grid = $('#calGrid');
@@ -1196,8 +1441,11 @@ function renderCalendar(){
   const gridStart = new Date(year, month, 1 - startOffset);
 
   const today = new Date();
+  const visibleTasks = calCategoryFilter
+    ? tasks.filter(t => t.categoriaId === calCategoryFilter)
+    : tasks;
   const tasksByDay = {};
-  tasks.forEach(t => {
+  visibleTasks.forEach(t => {
     const key = startOfDay(new Date(t.fecha)).toDateString();
     (tasksByDay[key] = tasksByDay[key] || []).push(t);
   });
@@ -1221,7 +1469,11 @@ function renderCalendar(){
       dots.className = 'dots';
       dayTasks.slice(0,4).forEach(t => {
         const dot = document.createElement('span');
-        dot.style.background = `var(--${t.prioridad})`;
+        // Si la tarea tiene categoría, el punto se colorea con el color
+        // de esa categoría (para identificarla fácil en el calendario);
+        // si no tiene, usamos el color de prioridad de siempre.
+        const cat = getCategory(t.categoriaId);
+        dot.style.background = cat ? cat.color : `var(--${t.prioridad})`;
         dots.appendChild(dot);
       });
       cell.appendChild(dots);
@@ -1238,8 +1490,11 @@ function showDayDetail(d, silent){
   selectedCalDay = d;
   const detail = $('#calDayDetail');
   detail.hidden = false;
-  $('#calDayDetailTitle').textContent = d.toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' });
-  const dayTasks = tasks.filter(t => isSameDay(new Date(t.fecha), d)).sort((a,b) => new Date(a.fecha)-new Date(b.fecha));
+  $('#calDayDetailTitle').textContent = capFirst(d.toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' }));
+  const dayTasks = tasks
+    .filter(t => isSameDay(new Date(t.fecha), d))
+    .filter(t => !calCategoryFilter || t.categoriaId === calCategoryFilter)
+    .sort((a,b) => new Date(a.fecha)-new Date(b.fecha));
   const ul = $('#calDayDetailList');
   ul.innerHTML = '';
   if(dayTasks.length === 0){
@@ -1286,6 +1541,7 @@ function openDialog(task){
   $all('.priority-picker input').forEach(r => r.checked = (r.value === prio));
   updatePriorityStyles();
   $('#taskAlerta').checked = task ? !!task.alerta : true;
+  renderCategoryOptions(task ? (task.categoriaId || '') : '');
 
   const del = $('#dialogDeleteRow');
   dialog.showModal();
@@ -1303,6 +1559,33 @@ $('#priorityPicker').addEventListener('change', updatePriorityStyles);
 $('#btnNewTask').addEventListener('click', () => openDialog(null));
 $('#btnCancelDialog').addEventListener('click', () => dialog.close());
 
+/* ---------------- Categorías: diálogo de gestión ---------------- */
+const categoryDialog = $('#categoryDialog');
+function openCategoryDialog(){
+  renderCategoryManagerList();
+  categoryDialog.showModal();
+}
+$('#btnManageCategoriesTop').addEventListener('click', openCategoryDialog);
+$('#btnManageCategoriesInline').addEventListener('click', openCategoryDialog);
+$('#btnCloseCategoryDialog').addEventListener('click', () => categoryDialog.close());
+
+$('#newCatForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = $('#newCatName').value.trim();
+  if(!nombre) return;
+  const color = $('#newCatColor').value;
+  const cat = { id: uid(), nombre, color };
+  await saveCategoryRemote(cat);
+  $('#newCatName').value = '';
+  // Siguiente color de la paleta, para que no siempre toque elegir manualmente.
+  const idx = (categories.length) % CATEGORY_COLORS.length;
+  $('#newCatColor').value = CATEGORY_COLORS[idx];
+  showToast('Categoría creada');
+  // Selecciona automáticamente la categoría recién creada en el formulario
+  // de tarea, si está abierto detrás de este diálogo.
+  renderCategoryOptions(cat.id);
+});
+
 $('#taskForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = $('#taskId').value || uid();
@@ -1314,6 +1597,7 @@ $('#taskForm').addEventListener('submit', async (e) => {
     fecha: new Date($('#taskFecha').value).toISOString(),
     prioridad: $('.priority-picker input:checked').value,
     alerta: $('#taskAlerta').checked,
+    categoriaId: $('#taskCategoria').value || null,
     estado: existing ? existing.estado : 'pendiente',
     cerradaEn: existing ? (existing.cerradaEn || null) : null,
   };
@@ -1322,9 +1606,49 @@ $('#taskForm').addEventListener('submit', async (e) => {
   showToast(existing ? 'Tarea actualizada' : 'Tarea creada');
 });
 
+/* ---------------- Dictado por voz ---------------- */
+// No todos los navegadores soportan reconocimiento de voz por JavaScript
+// (Safari/iOS lo trae de forma más limitada). Si no está disponible,
+// simplemente ocultamos el botón — el teclado del sistema (iOS/Android)
+// siempre tiene su propio micrófono de dictado nativo como respaldo.
+function attachDictation(targetEl, btnEl){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ btnEl.hidden = true; return; }
+  const recognition = new SR();
+  recognition.lang = 'es-ES';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  let listening = false;
+
+  btnEl.addEventListener('click', () => {
+    if(listening) { recognition.stop(); return; }
+    try{ recognition.start(); listening = true; btnEl.classList.add('recording'); }
+    catch(e){ /* ya estaba escuchando u otro estado transitorio */ }
+  });
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    const prev = targetEl.value.trim();
+    targetEl.value = prev ? (prev + ' ' + text) : text;
+    targetEl.dispatchEvent(new Event('input'));
+    targetEl.focus();
+  };
+  recognition.onerror = (e) => {
+    listening = false;
+    btnEl.classList.remove('recording');
+    if(e.error !== 'no-speech' && e.error !== 'aborted') showToast('No se pudo dictar — intenta de nuevo');
+  };
+  recognition.onend = () => { listening = false; btnEl.classList.remove('recording'); };
+}
+attachDictation($('#taskTitulo'), $('#micTitulo'));
+attachDictation($('#taskDescripcion'), $('#micDescripcion'));
+
 /* ---------------- Calendar nav ---------------- */
 $('#calPrev').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth()-1); renderCalendar(); });
 $('#calNext').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth()+1); renderCalendar(); });
+$('#calCategoryFilter').addEventListener('change', (e) => {
+  calCategoryFilter = e.target.value;
+  renderCalendar();
+});
 
 /* ---------------- Toast ---------------- */
 let toastTimer;
@@ -1490,6 +1814,7 @@ $('#importFile').addEventListener('change', (e) => {
    ============================================================ */
 let fb = null;               // referencias del SDK de Firebase, una vez cargado
 let unsubscribeTasks = null; // función para cancelar el listener de Firestore al cerrar sesión
+let unsubscribeCategories = null;
 
 function fbReady(){
   return new Promise((resolve, reject) => {
@@ -1516,6 +1841,53 @@ async function deleteTaskRemote(id){
   const user = fb.auth.currentUser;
   if(!user) return;
   await fb.deleteDoc(fb.doc(tasksCollectionRef(user.uid), id));
+}
+
+function categoriesCollectionRef(uid){
+  return fb.collection(fb.db, 'users', uid, 'categories');
+}
+
+async function saveCategoryRemote(cat){
+  const user = fb.auth.currentUser;
+  if(!user) return;
+  await fb.setDoc(fb.doc(categoriesCollectionRef(user.uid), cat.id), cat);
+}
+
+async function deleteCategoryRemote(id){
+  const user = fb.auth.currentUser;
+  if(!user) return;
+  await fb.deleteDoc(fb.doc(categoriesCollectionRef(user.uid), id));
+}
+
+/** Rellena el selector "Filtrar por categoría" del calendario. */
+function renderCalFilterOptions(){
+  const sel = $('#calCategoryFilter');
+  const current = calCategoryFilter;
+  sel.innerHTML = '<option value="">Todas las categorías</option>';
+  categories.slice().sort((a,b) => a.nombre.localeCompare(b.nombre, 'es')).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    sel.appendChild(opt);
+  });
+  // Si la categoría filtrada ya no existe (se eliminó), volvemos a "todas".
+  if(current && !categories.some(c => c.id === current)) calCategoryFilter = '';
+  sel.value = calCategoryFilter;
+}
+
+async function onCategoriesSnapshot(snapshot){
+  categories = snapshot.docs.map(d => d.data());
+  renderCategoryOptions();
+  renderCategoryManagerList();
+  renderCalFilterOptions();
+  render(); // refresca los chips de categoría en las tareas ya listadas
+  try{
+    const db = await openDB();
+    const tx = db.transaction(STORE_CAT, 'readwrite');
+    const store = tx.objectStore(STORE_CAT);
+    store.clear();
+    categories.forEach(c => store.put(c));
+  } catch(e){ /* espejo local opcional */ }
 }
 
 /** Se llama cada vez que Firestore reporta un cambio (propio o desde otro dispositivo). */
@@ -1557,6 +1929,9 @@ function showAppShell(user){
       console.error('Firestore error', err);
       showToast('Error de sincronización — revisa tu conexión');
     });
+    unsubscribeCategories = fb.onSnapshot(categoriesCollectionRef(user.uid), onCategoriesSnapshot, (err) => {
+      console.error('Firestore error (categorías)', err);
+    });
   });
 }
 
@@ -1565,7 +1940,9 @@ function showAuthGate(){
     $('#appShell').hidden = true;
     $('#authGate').hidden = false;
     if(unsubscribeTasks){ unsubscribeTasks(); unsubscribeTasks = null; }
+    if(unsubscribeCategories){ unsubscribeCategories(); unsubscribeCategories = null; }
     tasks = [];
+    categories = [];
   });
 }
 
@@ -1646,10 +2023,20 @@ function setupAuthUI(){
 
 /* ---------------- Init ---------------- */
 async function init(){
-  $('#dateToday').textContent = new Date().toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' });
+  $('#dateToday').textContent = capFirst(new Date().toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' }));
 
   if('serviceWorker' in navigator){
     try { await navigator.serviceWorker.register('sw.js'); } catch(e) { /* sin service worker disponible */ }
+    // Cuando subimos una versión nueva de la app, el Service Worker viejo
+    // seguía sirviendo archivos cacheados hasta que el usuario forzaba
+    // la recarga manualmente varias veces. Con esto, en cuanto el nuevo
+    // Service Worker toma control, recargamos automáticamente UNA vez.
+    let __swRefreshed = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if(__swRefreshed) return;
+      __swRefreshed = true;
+      window.location.reload();
+    });
   }
 
   fb = await fbReady().catch(() => null);
