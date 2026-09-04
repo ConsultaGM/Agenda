@@ -103,7 +103,6 @@
     };
 
     const isConfigured = !Object.values(firebaseConfig).some(v => String(v).startsWith('TU_'));
-    window.__agendaFirebase = { isConfigured };
 
     if (isConfigured) {
       const app = initializeApp(firebaseConfig);
@@ -116,6 +115,13 @@
       const db = getFirestore(app);
       try { await enableIndexedDbPersistence(db); } catch (e) { /* varias pestañas abiertas u otro motivo; se sigue sin persistencia offline de Firestore */ }
 
+      // ⚠️ Ojo: window.__agendaFirebase se asigna UNA sola vez, ya completo.
+      // Antes se asignaba primero a medias ({isConfigured}) y luego se
+      // completaba — si el resto de la app llegaba a leerlo justo en ese
+      // instante intermedio (por una carga lenta o de otro dispositivo),
+      // se quedaba con una versión incompleta (sin onAuthStateChanged,
+      // etc.) y la app nunca terminaba de cargar. Con una sola asignación
+      // completa, ese hueco de tiempo deja de existir.
       window.__agendaFirebase = {
         isConfigured, auth, db,
         GoogleAuthProvider, signInWithPopup,
@@ -124,6 +130,8 @@
         signOut, onAuthStateChanged,
         collection, doc, setDoc, deleteDoc, onSnapshot,
       };
+    } else {
+      window.__agendaFirebase = { isConfigured };
     }
     window.dispatchEvent(new Event('agenda-firebase-ready'));
   } catch(err){
